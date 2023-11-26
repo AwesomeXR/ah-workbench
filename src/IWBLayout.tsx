@@ -1,35 +1,19 @@
-export type IWBLayoutComponent = { key: string; type: 'Component'; component: string; query?: any };
+export type IWBComponent = { key: string; type: 'Component'; component: string; query?: any };
 
-export type IWBSplitDirection = 'vertical' | 'horizontal';
+export type IWBSplitDir = 'vertical' | 'horizontal';
 
-export type IWBLayoutSplit = {
+export type IWBSplitConfig_Fixed = { type: 'fixed'; size: number };
+export type IWBSplitConfig_Flex = { type: 'flex' };
+
+export type IWBSplitConfig = IWBSplitConfig_Fixed | IWBSplitConfig_Flex;
+
+export type IWBSplit = {
   key: string;
   type: 'Split';
-  ratio?: number;
-  direction?: IWBSplitDirection;
+  direction: IWBSplitDir;
+
   children: IWBLayout[];
+  config: IWBSplitConfig[];
 };
 
-export type IWBLayout = IWBLayoutComponent | IWBLayoutSplit;
-
-export type IWBSidePanel = {
-  layout: IWBLayout;
-};
-
-export type IWBConfigData = {
-  key: string;
-
-  layout: IWBLayout;
-
-  // 侧边栏
-  sidePanel?: {
-    width: number; // 侧边栏宽度
-    activeIdx: number; // 当前激活的侧边栏
-    list: IWBSidePanel[]; // 侧边栏列表
-  };
-
-  /** 当仅有一个组件时，隐藏 header widget */
-  hideHeaderWhenSingleComponent?: boolean;
-
-  hideHeaderWidget?: boolean;
-};
+export type IWBLayout = IWBComponent | IWBSplit;

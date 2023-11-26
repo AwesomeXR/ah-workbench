@@ -1,5 +1,5 @@
-import _ from 'lodash';
-import { IWBConfigData, IWBLayout, IWBLayoutComponent, IWBLayoutSplit, IWBSplitDirection } from './IWBLayout';
+import { sum } from 'lodash';
+import { IWBLayout, IWBComponent, IWBSplit, IWBSplitDir, IWBSplitConfig } from './IWBLayout';
 
 let uid = 0;
 
@@ -28,63 +28,73 @@ export const WBUtil = {
     }
   },
 
-  getAllLayouts(config: IWBConfigData) {
-    const list: IWBLayout[] = [];
-
-    this.walkLayout(config.layout, cur => {
-      list.push(cur);
-    });
-
-    // side panel
-    if (config.sidePanel) {
-      for (const _sp of config.sidePanel.list) {
-        this.walkLayout(_sp.layout, cur => {
-          list.push(cur);
-        });
-      }
-    }
-
-    return list;
+  createSplit(
+    children: IWBLayout[],
+    config: IWBSplitConfig[] = children.map(c => ({ type: 'flex' })),
+    direction: IWBSplitDir = 'horizontal'
+  ): IWBSplit {
+    return { type: 'Split', key: this.randomID(), direction, children, config };
   },
 
-  createSplit(children: IWBLayout[], direction: IWBSplitDirection = 'horizontal', ratio = 0.5): IWBLayoutSplit {
-    return { type: 'Split', key: this.randomID(), ratio, direction, children };
-  },
-
-  createComponent(component: string, query?: any): IWBLayoutComponent {
+  createComponent(component: string, query?: any): IWBComponent {
     return { type: 'Component', key: this.randomID(), component, query };
   },
 
-  resetLayout(layout: IWBLayout, newData: IWBLayout) {
-    // 原地修改 layout，保持引用
-    Object.keys(layout).forEach(k => delete (layout as any)[k]);
-    Object.assign(layout, newData);
+  calcSplitSize(config: IWBSplit['config'], totalSize: number) {
+    const sizeList: number[] = Array(config.length).fill(0);
+
+    // 1. 填充 fixed size
+    for (let i = 0; i < config.length; i++) {
+      const c = config[i];
+      if (c.type === 'fixed') sizeList[i] = c.size;
+    }
+
+    // 2. 填充 flex size
+    const flexCount = sizeList.filter(s => s === 0).length;
+    const flexPerSize = (totalSize - sum(sizeList)) / flexCount;
+    for (let i = 0; i < config.length; i++) {
+      const c = config[i];
+      if (c.type === 'flex') sizeList[i] = flexPerSize;
+    }
+
+    return sizeList;
   },
 
-  splitPanel(layout: IWBLayoutComponent, direction: IWBSplitDirection, lay2?: IWBLayout) {
-    if (!lay2) lay2 = this.createComponent(layout.component, _.cloneDeep(layout.query));
-    if (lay2.key === layout.key) throw new Error('duplicated key: ' + lay2.key);
+  moveSplit(config: IWBSplit['config'], index: number, totalSize: number, movement: number) {
+    const c1 = config[index];
+    const c2 = config[index + 1];
 
-    const newLayout = this.createSplit([_.cloneDeep(layout), lay2], direction);
-    this.resetLayout(layout, newLayout);
-  },
+    const minSize = 32;
 
-  closePanel(config: IWBConfigData, closeKey: string) {
-    let closeParent: IWBLayout | undefined;
+    const sizeList = this.calcSplitSize(config, totalSize);
+    const size1 = sizeList[index];
+    const size2 = sizeList[index + 1];
 
-    this.walkLayout(config.layout, (_cur, _parent) => {
-      if (_cur.key === closeKey) {
-        closeParent = _parent;
-        return 'stop';
-      }
-    });
+    let replaceC1: IWBSplitConfig | undefined = undefined;
 
-    if (!closeParent) throw new Error('missing closeParent');
-    if (closeParent.type !== 'Split') throw new Error('closeParent.type error');
+    if (c1.type === 'fixed' && c2.type === 'fixed') {
+      const _m = movement > 0 ? Math.min(movement, size2 - minSize) : Math.max(movement, minSize - size1); // 防止超量
 
-    const toKeepLayout = closeParent.children.find(c => c.key !== closeKey);
-    if (!toKeepLayout) throw new Error('missing toKeepLayout');
+      c1.size = size1 + _m;
+      c2.size = size2 - _m;
+    }
+    // [fixed, flex]
+    else if (c1.type === 'fixed' && c2.type === 'flex') {
+      const _m = Math.max(movement, minSize - size1); // 防止超量
+      c1.size = size1 + _m;
+    }
+    // [flex, fixed]
+    else if (c1.type === 'flex' && c2.type === 'fixed') {
+      const _m = Math.min(movement, size2 - minSize); // 防止超量
+      c2.size = size2 - _m;
+    }
+    // [flex, flex]
+    else {
+      // 上一个变为 fixed
+      const _m = Math.max(movement, minSize - size1); // 防止超量
+      replaceC1 = { type: 'fixed', size: size1 + _m };
+    }
 
-    this.resetLayout(closeParent, toKeepLayout);
+    if (replaceC1) config[index] = replaceC1;
   },
 };
